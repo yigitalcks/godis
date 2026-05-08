@@ -8,21 +8,11 @@ import (
 
 const MinArraySize = 4 // in bytes
 
-var (
-	PrefixArray        = []byte{'*'}
-	PrefixSimpleString = []byte{'+'}
-	PrefixSimpleError  = []byte{'-'}
-	PrefixInteger      = []byte{':'}
-	PrefixBulkString   = []byte{'$'}
-
-	CRLF = []byte{'\r', '\n'}
-)
-
 var parsers = map[byte]func([]byte) ([]byte, []byte, error){
-	PrefixSimpleString[0]: parseSimpleString,
-	PrefixSimpleError[0]:  parseSimpleError,
-	PrefixInteger[0]:      parseInteger,
-	PrefixBulkString[0]:   parseBulkString,
+	resp.PrefixSimpleString[0]: parseSimpleString,
+	resp.PrefixSimpleError[0]:  parseSimpleError,
+	resp.PrefixInteger[0]:      parseInteger,
+	resp.PrefixBulkString[0]:   parseBulkString,
 }
 
 func ParseArray(s []byte) ([][]byte, error) {
@@ -33,12 +23,12 @@ func ParseArray(s []byte) ([][]byte, error) {
 		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
-	idx := bytes.Index(s, PrefixArray)
+	idx := bytes.Index(s, resp.PrefixArray)
 	if idx == -1 || idx != 0 {
 		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
-	idx = bytes.Index(s, CRLF)
+	idx = bytes.Index(s, resp.CRLF)
 	if idx == -1 || idx == 1 {
 		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
@@ -96,7 +86,7 @@ func parseInteger(s []byte) ([]byte, []byte, error) {
 
 func parseBulkString(s []byte) ([]byte, []byte, error) {
 
-	idx := bytes.Index(s, CRLF)
+	idx := bytes.Index(s, resp.CRLF)
 	if idx < 2 { // in case of -1, 0 and 1
 		return nil, nil, resp.NewRespErr(resp.WrongFormat)
 	}
@@ -116,7 +106,7 @@ func parseBulkString(s []byte) ([]byte, []byte, error) {
 	res := s[idx+2 : idx+2+valLen]
 	s = s[idx+2+valLen:]
 
-	idx = bytes.Index(s, CRLF)
+	idx = bytes.Index(s, resp.CRLF)
 	if idx != 0 {
 		return nil, nil, resp.NewRespErr(resp.WrongFormat)
 	}

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParseRequest(t *testing.T) {
+func TestParseArray(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -114,17 +114,17 @@ func TestParseRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := ParseArray([]byte(tt.input))
 			if (err != nil) != tt.wantErr {
-				t.Errorf("parseRequest(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				t.Errorf("ParseArray(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 				return
 			}
 			if !tt.wantErr {
 				if len(got) != len(tt.want) {
-					t.Errorf("parseRequest(%q) length got = %d, want %d", tt.input, len(got), len(tt.want))
+					t.Errorf("ParseArray(%q) length got = %d, want %d", tt.input, len(got), len(tt.want))
 					return
 				}
 				for i := range got {
 					if !bytes.Equal(got[i], tt.want[i]) {
-						t.Errorf("parseRequest(%q) at index %d: got = %q, want %q", tt.input, i, string(got[i]), string(tt.want[i]))
+						t.Errorf("ParseArray(%q) at index %d: got = %q, want %q", tt.input, i, string(got[i]), string(tt.want[i]))
 					}
 				}
 			}
