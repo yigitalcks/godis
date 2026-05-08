@@ -1,7 +1,8 @@
-package main
+package parser
 
 import (
 	"bytes"
+	"godis/internal/resp"
 	"strconv"
 )
 
@@ -29,22 +30,22 @@ func ParseArray(s []byte) ([][]byte, error) {
 	var comAndArgs [][]byte
 
 	if len(s) < MinArraySize {
-		return nil, NewRespErr(WrongFormat, "")
+		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
 	idx := bytes.Index(s, PrefixArray)
 	if idx == -1 || idx != 0 {
-		return nil, NewRespErr(WrongFormat, "")
+		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
 	idx = bytes.Index(s, CRLF)
 	if idx == -1 || idx == 1 {
-		return nil, NewRespErr(WrongFormat, "")
+		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
 	nElements, err := strconv.Atoi(string(s[1:idx]))
 	if err != nil {
-		return nil, NewRespErr(WrongFormat, "")
+		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
 	if nElements == 0 {
@@ -52,18 +53,18 @@ func ParseArray(s []byte) ([][]byte, error) {
 	}
 
 	if idx+2 >= len(s) {
-		return nil, NewRespErr(WrongFormat, "")
+		return nil, resp.NewRespErr(resp.WrongFormat)
 	}
 	s = s[idx+2:]
 
 	for range nElements {
-		if s == nil {
-			return nil, NewRespErr(WrongFormat, "")
+		if len(s) == 0 {
+			return nil, resp.NewRespErr(resp.WrongFormat)
 		}
 
 		parser, ok := parsers[s[0]]
 		if !ok {
-			return nil, NewRespErr(WrongFormat, "")
+			return nil, resp.NewRespErr(resp.WrongFormat)
 		}
 
 		val, sNew, err := parser(s)
@@ -97,16 +98,19 @@ func parseBulkString(s []byte) ([]byte, []byte, error) {
 
 	idx := bytes.Index(s, CRLF)
 	if idx < 2 { // in case of -1, 0 and 1
-		return nil, nil, NewRespErr(WrongFormat, "")
+		return nil, nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
 	valLen, err := strconv.Atoi(string(s[1:idx]))
 	if err != nil {
-		return nil, nil, NewRespErr(WrongFormat, "")
+		return nil, nil, resp.NewRespErr(resp.WrongFormat)
+	}
+	if valLen == -1 {
+		return nil, s[idx+2:], nil
 	}
 
 	if len(s)-idx-4 < valLen {
-		return nil, nil, NewRespErr(WrongFormat, "")
+		return nil, nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
 	res := s[idx+2 : idx+2+valLen]
@@ -114,12 +118,8 @@ func parseBulkString(s []byte) ([]byte, []byte, error) {
 
 	idx = bytes.Index(s, CRLF)
 	if idx != 0 {
-		return nil, nil, NewRespErr(WrongFormat, "")
+		return nil, nil, resp.NewRespErr(resp.WrongFormat)
 	}
 
-	if len(s) > 2 {
-		return res, s[2:], nil
-	}
-
-	return res, nil, nil
+	return res, s[2:], nil
 }

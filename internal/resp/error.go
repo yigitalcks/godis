@@ -1,4 +1,4 @@
-package main
+package resp
 
 import "fmt"
 
@@ -28,9 +28,13 @@ func (r *RespErr) Error() string {
 	return fmt.Sprintf("%s, %s", ErrPrefixMap[r.Prefix], r.Msg)
 }
 
-func NewRespErr(prefix ErrTyp, msg string) *RespErr {
+func NewRespErr(prefix ErrTyp, msg ...string) *RespErr {
+	var m string
+	if len(msg) > 0 {
+		m = msg[0]
+	}
 	return &RespErr{
 		Prefix: prefix,
-		Msg:    msg,
+		Msg:    m,
 	}
 }
