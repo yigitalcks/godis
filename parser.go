@@ -5,90 +5,121 @@ import (
 	"strconv"
 )
 
-const MinBulkStringSize = 4 // in bytes
+const MinArraySize = 4 // in bytes
 
-func ParseRequest(req []byte) ([][]byte, error) {
+var (
+	PrefixArray        = []byte{'*'}
+	PrefixSimpleString = []byte{'+'}
+	PrefixSimpleError  = []byte{'-'}
+	PrefixInteger      = []byte{':'}
+	PrefixBulkString   = []byte{'$'}
 
-	if len(req) == 0 {
-		return nil, NewRespErr(WrongFormat, "Too short request.")
-	}
+	CRLF = []byte{'\r', '\n'}
+)
 
-	i := bytes.Index(req, []byte("\r\n"))
-	if i == -1 {
+var parsers = map[byte]func([]byte) ([]byte, []byte, error){
+	PrefixSimpleString[0]: parseSimpleString,
+	PrefixSimpleError[0]:  parseSimpleError,
+	PrefixInteger[0]:      parseInteger,
+	PrefixBulkString[0]:   parseBulkString,
+}
+
+func ParseArray(s []byte) ([][]byte, error) {
+
+	var comAndArgs [][]byte
+
+	if len(s) < MinArraySize {
 		return nil, NewRespErr(WrongFormat, "")
 	}
-	if len(req) < i+3 {
+
+	idx := bytes.Index(s, PrefixArray)
+	if idx == -1 || idx != 0 {
 		return nil, NewRespErr(WrongFormat, "")
 	}
 
-	head := req[:i]
-	if len(head) < 2 {
+	idx = bytes.Index(s, CRLF)
+	if idx == -1 || idx == 1 {
 		return nil, NewRespErr(WrongFormat, "")
 	}
 
-	if head[0] != '*' {
-		return nil, NewRespErr(WrongFormat, "")
-	}
-
-	num, err := strconv.ParseInt(string(head[1:]), 10, 64)
+	nElements, err := strconv.Atoi(string(s[1:idx]))
 	if err != nil {
 		return nil, NewRespErr(WrongFormat, "")
 	}
 
-	body := req[i+2:]
-	comAndArgs, err := parseRequestData(int(num), body)
-	if err != nil {
-		return nil, err
+	if nElements == 0 {
+		return [][]byte{}, nil
+	}
+
+	if idx+2 >= len(s) {
+		return nil, NewRespErr(WrongFormat, "")
+	}
+	s = s[idx+2:]
+
+	for range nElements {
+		if s == nil {
+			return nil, NewRespErr(WrongFormat, "")
+		}
+
+		parser, ok := parsers[s[0]]
+		if !ok {
+			return nil, NewRespErr(WrongFormat, "")
+		}
+
+		val, sNew, err := parser(s)
+		if err != nil {
+			return nil, err
+		}
+
+		s = sNew
+		comAndArgs = append(comAndArgs, val)
 	}
 
 	return comAndArgs, nil
 }
 
-func parseRequestData(n int, s []byte) ([][]byte, error) {
+func parseSimpleString(s []byte) ([]byte, []byte, error) {
+	// TODO To be Implemented
+	return nil, nil, nil
+}
 
-	comAndArgs := make([][]byte, 0, n)
-	for i := range n {
-		if len(s) < MinBulkStringSize || s[0] != '$' {
-			return nil, NewRespErr(WrongFormat, "")
-		}
+func parseSimpleError(s []byte) ([]byte, []byte, error) {
+	// TODO To be Implemented
+	return nil, nil, nil
+}
 
-		idx := bytes.Index(s, []byte("\r\n"))
-		if idx == -1 {
-			return nil, NewRespErr(WrongFormat, "")
-		}
-		if len(s) < idx+3 {
-			return nil, NewRespErr(WrongFormat, "")
-		}
+func parseInteger(s []byte) ([]byte, []byte, error) {
+	// TODO To be Implemented
+	return nil, nil, nil
+}
 
-		head := s[:idx]
-		if len(head) < 2 {
-			return nil, NewRespErr(WrongFormat, "")
-		}
+func parseBulkString(s []byte) ([]byte, []byte, error) {
 
-		nBytes, err := strconv.ParseInt(string(s[1:idx]), 10, 64)
-		if err != nil {
-			return nil, NewRespErr(WrongFormat, "")
-		}
-
-		body := s[idx+2:]
-		if len(body) < int(nBytes)+2 {
-			return nil, NewRespErr(WrongFormat, "")
-		}
-
-		d := body[:nBytes]
-		body = body[nBytes:]
-		idxCLRF := bytes.Index(body, []byte("\r\n"))
-		if idxCLRF == -1 {
-			return nil, NewRespErr(WrongFormat, "")
-		}
-
-		if i < n-1 {
-			if len(body[idxCLRF:]) < 3 {
-				return nil, NewRespErr(WrongFormat, "")
-			}
-			s = body[idxCLRF+2:]
-		}
-		comAndArgs = append(comAndArgs, body[:idxCLRF])
+	idx := bytes.Index(s, CRLF)
+	if idx < 2 { // in case of -1, 0 and 1
+		return nil, nil, NewRespErr(WrongFormat, "")
 	}
-	return comAndArgs, nil
+
+	valLen, err := strconv.Atoi(string(s[1:idx]))
+	if err != nil {
+		return nil, nil, NewRespErr(WrongFormat, "")
+	}
+
+	if len(s)-idx-4 < valLen {
+		return nil, nil, NewRespErr(WrongFormat, "")
+	}
+
+	res := s[idx+2 : idx+2+valLen]
+	s = s[idx+2+valLen:]
+
+	idx = bytes.Index(s, CRLF)
+	if idx != 0 {
+		return nil, nil, NewRespErr(WrongFormat, "")
+	}
+
+	if len(s) > 2 {
+		return res, s[2:], nil
+	}
+
+	return res, nil, nil
 }
