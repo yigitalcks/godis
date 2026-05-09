@@ -6,14 +6,17 @@ type ErrTyp int
 
 const (
 	WrongFormat ErrTyp = iota
+	EncodingError
 )
 
 var ErrPrefixMap = map[ErrTyp]string{
-	WrongFormat: "WRONGFORMAT",
+	WrongFormat:   "WrongFormat",
+	EncodingError: "EncodingErr",
 }
 
 var DefaultErrMsgMap = map[ErrTyp]string{
-	WrongFormat: "Request is in invalid format",
+	WrongFormat:   "Request is in invalid format",
+	EncodingError: "An Error has occured during Encoding",
 }
 
 type RespErr struct {

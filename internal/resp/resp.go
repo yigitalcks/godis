@@ -33,5 +33,5 @@ type RespBulkString struct {
 }
 
 type RespArray struct {
-	Value []any
+	Value []RespType
 }
