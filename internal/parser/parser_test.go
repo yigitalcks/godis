@@ -2,10 +2,11 @@ package parser
 
 import (
 	"bytes"
+	"godis/internal/resp"
 	"testing"
 )
 
-func TestParseArray(t *testing.T) {
+func TestParseRequest(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -112,19 +113,31 @@ func TestParseArray(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseArray([]byte(tt.input))
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseArray(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			got := ParseRequest([]byte(tt.input))
+			_, isErr := got.(*resp.RespSimpleError)
+			if isErr != tt.wantErr {
+				t.Errorf("ParseArray(%q) isErr = %v, wantErr %v", tt.input, isErr, tt.wantErr)
 				return
 			}
 			if !tt.wantErr {
-				if len(got) != len(tt.want) {
-					t.Errorf("ParseArray(%q) length got = %d, want %d", tt.input, len(got), len(tt.want))
+				respArray, ok := got.(*resp.RespArray)
+				if !ok {
+					t.Errorf("ParseArray(%q) got type %T, want *resp.RespArray", tt.input, got)
 					return
 				}
-				for i := range got {
-					if !bytes.Equal(got[i], tt.want[i]) {
-						t.Errorf("ParseArray(%q) at index %d: got = %q, want %q", tt.input, i, string(got[i]), string(tt.want[i]))
+
+				if len(respArray.Value) != len(tt.want) {
+					t.Errorf("ParseArray(%q) length got = %d, want %d", tt.input, len(respArray.Value), len(tt.want))
+					return
+				}
+				for i := range respArray.Value {
+					bulk, ok := respArray.Value[i].(*resp.RespBulkString)
+					if !ok {
+						t.Errorf("ParseArray(%q) element %d is type %T, want *resp.RespBulkString", tt.input, i, respArray.Value[i])
+						continue
+					}
+					if !bytes.Equal(bulk.Value, tt.want[i]) {
+						t.Errorf("ParseArray(%q) at index %d: got = %q, want %q", tt.input, i, string(bulk.Value), string(tt.want[i]))
 					}
 				}
 			}

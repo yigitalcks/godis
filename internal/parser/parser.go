@@ -8,108 +8,90 @@ import (
 
 const MinArraySize = 4 // in bytes
 
-var parsers = map[byte]func([]byte) ([]byte, []byte, error){
-	resp.PrefixSimpleString[0]: parseSimpleString,
-	resp.PrefixSimpleError[0]:  parseSimpleError,
-	resp.PrefixInteger[0]:      parseInteger,
-	resp.PrefixBulkString[0]:   parseBulkString,
-}
+// Request should be an array of bulk strings
+func ParseRequest(s []byte) resp.RespType {
 
-func ParseArray(s []byte) ([][]byte, error) {
-
-	var comAndArgs [][]byte
+	var array resp.RespArray
 
 	if len(s) < MinArraySize {
-		return nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat)
 	}
 
 	idx := bytes.Index(s, resp.PrefixArray)
 	if idx == -1 || idx != 0 {
-		return nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat)
 	}
 
 	idx = bytes.Index(s, resp.CRLF)
 	if idx == -1 || idx == 1 {
-		return nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat)
 	}
 
 	nElements, err := strconv.Atoi(string(s[1:idx]))
 	if err != nil {
-		return nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat)
 	}
 
 	if nElements == 0 {
-		return [][]byte{}, nil
+		if len(s) == MinArraySize {
+			return &resp.RespArray{}
+		}
+		return resp.NewRespSimpleError(resp.WrongFormat)
 	}
 
 	if idx+2 >= len(s) {
-		return nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat)
 	}
 	s = s[idx+2:]
 
 	for range nElements {
 		if len(s) == 0 {
-			return nil, resp.NewRespErr(resp.WrongFormat)
+			return resp.NewRespSimpleError(resp.WrongFormat)
 		}
 
-		parser, ok := parsers[s[0]]
-		if !ok {
-			return nil, resp.NewRespErr(resp.WrongFormat)
+		if s[0] != resp.PrefixBulkString[0] {
+			return resp.NewRespSimpleError(resp.WrongFormat)
 		}
 
-		val, sNew, err := parser(s)
-		if err != nil {
-			return nil, err
+		val, sNew := parseBulkString(s)
+		if _, isErr := val.(*resp.RespSimpleError); isErr {
+			return val
 		}
 
 		s = sNew
-		comAndArgs = append(comAndArgs, val)
+		array.Value = append(array.Value, val)
 	}
 
-	return comAndArgs, nil
+	return &array
 }
 
-func parseSimpleString(s []byte) ([]byte, []byte, error) {
-	// TODO To be Implemented
-	return nil, nil, nil
-}
-
-func parseSimpleError(s []byte) ([]byte, []byte, error) {
-	// TODO To be Implemented
-	return nil, nil, nil
-}
-
-func parseInteger(s []byte) ([]byte, []byte, error) {
-	// TODO To be Implemented
-	return nil, nil, nil
-}
-
-func parseBulkString(s []byte) ([]byte, []byte, error) {
+func parseBulkString(s []byte) (resp.RespType, []byte) {
 
 	idx := bytes.Index(s, resp.CRLF)
 	if idx < 2 { // in case of -1, 0 and 1
-		return nil, nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat), nil
 	}
 
 	valLen, err := strconv.Atoi(string(s[1:idx]))
 	if err != nil {
-		return nil, nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat), nil
 	}
 	if valLen == -1 {
-		return nil, s[idx+2:], nil
+		return resp.NewRespBulkString(nil), s[idx+2:]
 	}
 
 	if len(s)-idx-4 < valLen {
-		return nil, nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat), nil
 	}
 
-	res := s[idx+2 : idx+2+valLen]
+	res := resp.NewRespBulkString(s[idx+2 : idx+2+valLen])
+
 	s = s[idx+2+valLen:]
 
 	idx = bytes.Index(s, resp.CRLF)
 	if idx != 0 {
-		return nil, nil, resp.NewRespErr(resp.WrongFormat)
+		return resp.NewRespSimpleError(resp.WrongFormat), nil
 	}
 
-	return res, s[2:], nil
+	return res, s[2:]
 }
