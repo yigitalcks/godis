@@ -9,20 +9,26 @@ const (
 	EncodingError
 	EmptyArray
 	WrongCommand
+	RequestTooLarge
+	ConnectionError
 )
 
 var ErrPrefixMap = map[ErrTyp]string{
-	WrongFormat:   "WrongFormat",
-	EncodingError: "EncodingErr",
-	EmptyArray:    "EmptyError",
-	WrongCommand:  "WrongCommand",
+	WrongFormat:     "ERR",
+	EncodingError:   "ERR",
+	EmptyArray:      "ERR",
+	WrongCommand:    "ERR",
+	RequestTooLarge: "ERR",
+	ConnectionError: "ERR",
 }
 
 var DefaultErrMsgMap = map[ErrTyp]string{
-	WrongFormat:   "Request is in invalid format",
-	EncodingError: "An Error has occured during Encoding",
-	EmptyArray:    "Request is an empty array",
-	WrongCommand:  "Command is not valid",
+	WrongFormat:     "request is in invalid format",
+	EncodingError:   "an error has occurred during encoding",
+	EmptyArray:      "request is an empty array",
+	WrongCommand:    "unknown command",
+	RequestTooLarge: "max request size exceeded",
+	ConnectionError: "connection error",
 }
 
 func (r *RespSimpleError) Error() string {
