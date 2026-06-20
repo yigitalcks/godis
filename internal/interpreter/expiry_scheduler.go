@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"godis/internal/logging"
 )
 
 type Expiryjob struct {
@@ -35,6 +37,7 @@ func (e *ExpiryScheduler) Start() {
 					time.Sleep(job.delay)
 
 					e.data.Delete(job.key)
+					logging.Println("godis: key expired -", job.key)
 				}(job)
 			case <-e.ctx.Done():
 				return

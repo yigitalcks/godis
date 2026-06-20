@@ -3,14 +3,15 @@ package main
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"godis/internal/interpreter"
+	"godis/internal/logging"
 	"godis/internal/parser"
 	"godis/internal/resp"
 )
@@ -26,14 +27,14 @@ func main() {
 	var data sync.Map
 	expiryJobs := make(chan interpreter.Expiryjob, MaxConcurrentExpiryJobs)
 
-	fmt.Println("godis: starting on :6379")
+	logging.Println("godis: starting on :6379")
 
 	intr := interpreter.NewInterpreter(&data, expiryJobs)
 	es := interpreter.NewExpiryScheduler(expiryJobs, &data)
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
-		fmt.Println("godis: failed to bind to port 6379:", err)
+		logging.Println("godis: failed to bind to port 6379:", err)
 		os.Exit(1)
 	}
 	defer l.Close()
@@ -43,28 +44,51 @@ func main() {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			fmt.Println("godis: accept error:", err)
+			logging.Println("godis: accept error:", err)
 			os.Exit(1)
 		}
-		fmt.Println("godis: new connection from", conn.RemoteAddr())
+		logging.Println("godis: new connection from", conn.RemoteAddr())
 		go handle_command(conn, intr)
 	}
 }
 
-func writeResponse(c net.Conn, w *bufio.Writer, v resp.RespType) error {
+func writeResponse(c net.Conn, w *bufio.Writer, v resp.RespType) {
 	if err := c.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		return fmt.Errorf("set write deadline: %w", err)
+		logging.Printf("set write deadline: %w", err)
+		return
 	}
 	if err := v.Encode(w); err != nil {
-		return fmt.Errorf("encode: %w", err)
+		logging.Printf("encode: %w", err)
+		return
 	}
 	if err := w.Flush(); err != nil {
 		if errors.Is(err, os.ErrDeadlineExceeded) {
-			return fmt.Errorf("write deadline exceeded")
+			logging.Printf("write deadline exceeded")
+			return
 		}
-		return fmt.Errorf("flush: %w", err)
+		logging.Printf("flush: %w", err)
 	}
-	return nil
+}
+
+func commandText(req *resp.RespArray) string {
+	if len(req.Value) == 0 {
+		return "<empty>"
+	}
+
+	parts := make([]string, 0, len(req.Value))
+	for _, value := range req.Value {
+		bulk, ok := value.(*resp.RespBulkString)
+		if !ok {
+			parts = append(parts, "<invalid>")
+			continue
+		}
+		if bulk.Value == nil {
+			parts = append(parts, "<nil>")
+			continue
+		}
+		parts = append(parts, string(bulk.Value))
+	}
+	return strings.Join(parts, " ")
 }
 
 func handle_command(c net.Conn, intr *interpreter.Interpreter) {
@@ -77,7 +101,7 @@ func handle_command(c net.Conn, intr *interpreter.Interpreter) {
 	for {
 		err := c.SetReadDeadline(time.Now().Add(5 * time.Second))
 		if err != nil {
-			fmt.Println("Error setting read deadline: ", err.Error())
+			logging.Println("Error setting read deadline:", err.Error())
 			return
 		}
 
@@ -86,43 +110,35 @@ func handle_command(c net.Conn, intr *interpreter.Interpreter) {
 			if errors.Is(err, io.EOF) {
 				return
 			} else if errors.Is(err, os.ErrDeadlineExceeded) {
-				fmt.Println("godis: read deadline exceeded for", c.RemoteAddr())
+				logging.Println("godis: read deadline exceeded for", c.RemoteAddr())
 			} else {
-				fmt.Println("godis: read error from", c.RemoteAddr(), "-", err)
+				logging.Println("godis: read error from", c.RemoteAddr(), "-", err)
 			}
 			return
 		}
 
 		if r.Buffered() > 0 {
-			fmt.Println("godis: request too large from", c.RemoteAddr())
+			logging.Println("godis: request too large from", c.RemoteAddr())
 			errResp := resp.NewRespSimpleError(resp.RequestTooLarge)
-			if err = writeResponse(c, w, errResp); err != nil {
-				fmt.Println("godis: write error to", c.RemoteAddr(), "-", err)
-			}
+			writeResponse(c, w, errResp)
 			return
 		}
 
 		req := parser.ParseRequest(buf[:n])
 		if _, isErr := req.(*resp.RespSimpleError); isErr {
-			fmt.Println("godis: parse error from", c.RemoteAddr(), "-", req)
-			if err = writeResponse(c, w, req); err != nil {
-				fmt.Println("godis: write error to", c.RemoteAddr(), "-", err)
-			}
+			logging.Println("godis: parse error from", c.RemoteAddr(), "-", req)
+			writeResponse(c, w, req)
 			return
 		}
 
-		res := intr.Execute(req.(*resp.RespArray))
+		reqArray := req.(*resp.RespArray)
+		res := intr.Execute(reqArray)
 		if _, isErr := res.(*resp.RespSimpleError); isErr {
-			fmt.Println("godis: command error from", c.RemoteAddr(), "-", res)
+			logging.Println("godis: command executed from", c.RemoteAddr(), "-", commandText(reqArray), "- error:", res)
+		} else {
+			logging.Println("godis: command executed from", c.RemoteAddr(), "-", commandText(reqArray))
 		}
 
-		if err = writeResponse(c, w, res); err != nil {
-			fmt.Println("godis: write error to", c.RemoteAddr(), "-", err)
-			return
-		}
+		writeResponse(c, w, res)
 	}
-}
-
-func handleExpiryEvents() {
-
 }
